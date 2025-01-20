@@ -1,9 +1,15 @@
 const express = require('express');
 const Task = require('../models/Task');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET;
+const { authenticate } = require("../middleware/auth");
+
+
 
 // GET all tasks
-router.get('/tasks', async(req, res) => {
+
+router.get('/', authenticate, async(req, res) => {
     try {
         const tasks = await Task.find();
         res.json(tasks);
@@ -14,20 +20,35 @@ router.get('/tasks', async(req, res) => {
 });
 
 // POST a new task
-router.post('/tasks', async(req, res) => {
-    const { title, description } = req.body;
-    const newTask = new Task({ title, description, status: 'pending' });
-
+router.post('/', authenticate, async(req, res) => {
     try {
-        await newTask.save();
-        res.json(newTask);
-    } catch (err) {
-        res.status(500).send('Error adding task');
+        const { title, description } = req.body;
+
+        // Validate request data
+        if (!title) {
+            return res.status(400).json({ message: 'Title is required' });
+        }
+
+        // Create a new task
+        const newTask = new Task({
+            title,
+            description,
+            status: 'pending',
+            userId: req.user.userId, // `req.user` is populated by the authentication middleware
+        });
+
+        // Save the task to the database
+        const savedTask = await newTask.save();
+
+        res.status(201).json({ message: 'Task created successfully', task: savedTask });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
 // PATCH to update a task's status
-router.put('/tasks/:id', async(req, res) => {
+router.put('/:id', authenticate, async(req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -40,7 +61,7 @@ router.put('/tasks/:id', async(req, res) => {
 });
 
 // DELETE a task
-router.delete('/tasks/:id', async(req, res) => {
+router.delete('/:id', authenticate, async(req, res) => {
     const { id } = req.params;
 
     try {
